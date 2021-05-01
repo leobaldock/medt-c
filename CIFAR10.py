@@ -27,7 +27,7 @@ print(
 
 ### CONSTANTS ###
 DATA_PATH = './data'
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 LOADER_WORKERS = 8
 ### END CONSTANTS ###
 
