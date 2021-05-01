@@ -73,6 +73,67 @@ class AxialAttention(nn.Module):
             y = y.permute(0, 3, 2, 1)
         return y
 
+class PositionSensitiveAxialAttention(nn.Module):
+    def __init__(self, embed_size, heads, is_width=False):
+        super(AxialAttention, self).__init__()
+        self.embed_size = embed_size
+        self.heads = heads
+        self.head_dim = embed_size // heads
+        self.is_width = is_width
+        
+        assert (self.head_dim * heads == embed_size), "Embed size needs to be divisible by heads"
+        
+        self.values = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.keys = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.queries = nn.Linear(self.head_dim, self.head_dim, bias=False)
+        self.fc_out = nn.Linear(heads*self.head_dim, embed_size)
+
+        # Positional Embeddings
+        
+        
+    def forward(self, x):
+        if self.is_width:
+            y = x.permute(0, 2, 3, 1)
+        else:
+            y = x.permute(0, 3, 2, 1)
+        N, D1, D2, C = y.shape
+        y = y.contiguous().view(N * D1, D2, C)
+        
+        # Split input into self.heads chunks. possible that this needs to go after the linear projections
+        y = y.reshape(
+                N * D1,
+                D2,
+                self.heads, 
+                self.head_dim
+            )
+        
+        values = self.values(y)
+        keys = self.keys(y)
+        queries = self.queries(y)
+        
+        #this is the QK matrix multiply step
+        energy = torch.einsum("nqhd,nkhd->nhqk", [queries, keys])
+        # queries shape: (N, query_len, heads, heads_dim)
+        # keys shape: (N, key_len, heads, heads_dim)
+        # energy shape: (N, heads, query_len, key_len)
+            
+        attention = torch.softmax(energy / (self.embed_size ** (1/2)), dim=3)
+        
+        # concat the heads with wierd reshape thing
+        y = torch.einsum("nhql,nlhd->nqhd", [attention, values]).reshape(
+            N, D1, D2, C
+        )
+        # attention shape: (N, heads, query_len, key_len)
+        # values shape: (N, value_len, heads, heads_dim)
+        # after einsum: (N, query_len, heads, head_dim) then flatten last two dimensions
+        
+        y = self.fc_out(y)
+        if self.is_width:
+            y = y.permute(0, 3, 1, 2)
+        else:
+            y = y.permute(0, 3, 2, 1)
+        return y
+
 
 class GatedAxialTransformerLayer(nn.Module):
     def __init__(self, in_channels, heads):

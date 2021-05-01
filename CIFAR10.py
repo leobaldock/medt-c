@@ -6,9 +6,11 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.cuda.amp import autocast, GradScaler
 import torchvision
 import torchvision.transforms as transforms
 import torch.autograd.profiler as profiler
+from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -27,7 +29,6 @@ print(
 DATA_PATH = './data'
 BATCH_SIZE = 64
 LOADER_WORKERS = 8
-
 ### END CONSTANTS ###
 
 parser = argparse.ArgumentParser()
@@ -40,7 +41,8 @@ args = vars(parser.parse_args())
 train_transform = transforms.Compose(
     [
         transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(20),
+        transforms.RandomResizedCrop(32, (0.85, 1.15)),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ]
@@ -60,10 +62,10 @@ train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE,
                                            pin_memory=True)
 
 val_set = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False,
-                                        download=True, transform=val_transform)
+                                       download=True, transform=val_transform)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=BATCH_SIZE,
-                                          shuffle=False, num_workers=LOADER_WORKERS,
-                                          pin_memory=True)
+                                         shuffle=False, num_workers=LOADER_WORKERS,
+                                         pin_memory=True)
 
 classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
@@ -80,6 +82,21 @@ model = MedT_C(
 device = torch.device("cuda:0" if next(
     model.parameters()).is_cuda else "cpu")
 
+# TENSORBOARD SETUP
+# print("Starting TensorBoard")
+# board_loader = torch.utils.data.DataLoader(train_set, batch_size=1, num_workers=1)
+
+# writer = SummaryWriter('runs/CIFAR10')
+# dataiter = iter(board_loader)
+# images, labels = dataiter.next()
+# images = images.to(device)
+
+# writer.add_graph(model, images)
+# writer.close()
+# print("TensorBoard Ready")
+
+# END TENSORBOARD SETUP
+
 # total parameters and trainable parameters
 total_params = sum(p.numel() for p in model.parameters())
 print(f"{total_params:,} total parameters.")
@@ -90,9 +107,11 @@ print(f"{total_trainable_params:,} training parameters.")
 print(f"Model on CUDA: {next(model.parameters()).is_cuda}")
 
 lr = 0.001
-epochs = 1
+epochs = 100
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+# optimizer = optim.Adam(model.parameters(), lr=lr)
+scaler = GradScaler()
 
 # strings to save plots
 loss_plot_name = 'loss'
@@ -129,26 +148,34 @@ def fit(model, train_dataloader, train_dataset, optimizer, criterion):
         data, target = data[0].to(device), data[1].to(device)
         total += target.size(0)
         optimizer.zero_grad()
-        outputs = model(data)
-        loss = criterion(outputs, target)
+        # Run the forward pass with autocasting.
+        with autocast():
+            outputs = model(data)
+            loss = criterion(outputs, target)
         train_running_loss += loss.item()
         _, preds = torch.max(outputs.data, 1)
         train_running_correct += (preds == target).sum().item()
-        loss.backward()
-        optimizer.step()
-    
+        # Scale loss.
+        scaler.scale(loss).backward()
+        # Scaled optimiser step.
+        scaler.step(optimizer)
+        # Update scale for next iteration.
+        scaler.update()
+
     train_loss = train_running_loss / counter
     train_accuracy = 100. * train_running_correct / total
     return train_loss, train_accuracy
 
+
 def validate(model, test_dataloader, val_dataset, criterion):
     print("Validating")
-    model.eval() # TODO IMPLEMENT THIS FOR MY MODEL
+    model.eval()  # TODO IMPLEMENT THIS FOR MY MODEL
     val_running_loss = 0.0
     val_running_correct = 0
     counter = 0
     total = 0
-    prog_bar = tqdm(enumerate(test_dataloader), total=int(len(val_dataset)/test_dataloader.batch_size))
+    prog_bar = tqdm(enumerate(test_dataloader), total=int(
+        len(val_dataset)/test_dataloader.batch_size))
     with torch.no_grad():
         for i, data in prog_bar:
             counter += 1
@@ -156,14 +183,15 @@ def validate(model, test_dataloader, val_dataset, criterion):
             total += target.size(0)
             outputs = model(data)
             loss = criterion(outputs, target)
-            
+
             val_running_loss += loss.item()
             _, preds = torch.max(outputs.data, 1)
             val_running_correct += (preds == target).sum().item()
-        
+
         val_loss = val_running_loss / counter
         val_accuracy = 100. * val_running_correct / total
         return val_loss, val_accuracy
+
 
 train_loss, train_accuracy = [], []
 val_loss, val_accuracy = [], []
@@ -186,7 +214,8 @@ for epoch in range(epochs):
         early_stopping(val_epoch_loss)
         if early_stopping.early_stop:
             break
-    print(f"Train Loss: {train_epoch_loss:.4f}, Train Acc: {train_epoch_accuracy:.2f}")
+    print(
+        f"Train Loss: {train_epoch_loss:.4f}, Train Acc: {train_epoch_accuracy:.2f}")
     print(f'Val Loss: {val_epoch_loss:.4f}, Val Acc: {val_epoch_accuracy:.2f}')
 end = time.time()
 print(f"Training time: {(end-start)/60:.3f} minutes")
@@ -210,9 +239,9 @@ plt.ylabel('Loss')
 plt.legend()
 plt.savefig(f"outputs/{loss_plot_name}.png")
 plt.show()
-    
+
 # serialize the model to disk
 print('Saving model...')
 torch.save(model.state_dict(), f"outputs/{model_name}.pth")
- 
+
 print('TRAINING COMPLETE')

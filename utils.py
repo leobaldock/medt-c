@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+##########
+# Title: Using Learning Rate Scheduler and Early Stopping with PyTorch
+# Author: Sovit Ranjan Rath
+# Date: March 1 2021
+# Code version: 1.0
+# Available: https://debuggercafe.com/using-learning-rate-scheduler-and-early-stopping-with-pytorch/
+##########
+
 import torch
 class LRScheduler():
     """
