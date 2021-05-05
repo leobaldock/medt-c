@@ -27,7 +27,7 @@ print(
 
 ### CONSTANTS ###
 DATA_PATH = './data'
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 LOADER_WORKERS = 8
 ### END CONSTANTS ###
 
@@ -193,11 +193,51 @@ def validate(model, test_dataloader, val_dataset, criterion):
         return val_loss, val_accuracy
 
 
+def save(
+        train_accuracy,
+        val_accuracy,
+        acc_plot_name,
+        train_loss,
+        val_loss,
+        loss_plot_name,
+        model_name,
+        show_plots=False
+):
+    print('Saving loss and accuracy plots...')
+    # accuracy plots
+    plt.figure(figsize=(10, 7))
+    plt.plot(train_accuracy, color='green', label='train accuracy')
+    plt.plot(val_accuracy, color='blue', label='validataion accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.savefig(f"outputs/{acc_plot_name}.png")
+    if show_plots: plt.show()
+    # loss plots
+    plt.figure(figsize=(10, 7))
+    plt.plot(train_loss, color='orange', label='train loss')
+    plt.plot(val_loss, color='red', label='validataion loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig(f"outputs/{loss_plot_name}.png")
+    if show_plots: plt.show()
+
+    # serialize the model to disk
+    print('Saving model...')
+    torch.save(model.state_dict(), f"outputs/{model_name}.pth")
+
+
 train_loss, train_accuracy = [], []
 val_loss, val_accuracy = [], []
 start = time.time()
 for epoch in range(epochs):
     print(f"Epoch {epoch+1} of {epochs}")
+    # Turn on gate training after 10 epochs.
+    if epoch == 10:
+        print("Begin training gates...")
+        for p in model.parameters():
+            p.requires_grad = True
     train_epoch_loss, train_epoch_accuracy = fit(
         model, train_loader, train_set, optimizer, criterion
     )
@@ -216,32 +256,12 @@ for epoch in range(epochs):
             break
     print(
         f"Train Loss: {train_epoch_loss:.4f}, Train Acc: {train_epoch_accuracy:.2f}")
-    print(f'Val Loss: {val_epoch_loss:.4f}, Val Acc: {val_epoch_accuracy:.2f}')
+    print(
+        f'Val Loss: {val_epoch_loss:.4f}, Val Acc: {val_epoch_accuracy:.2f}')
+    save(train_accuracy, val_accuracy, acc_plot_name, train_loss,
+        val_loss, loss_plot_name, model_name, show_plots=False)
+
 end = time.time()
 print(f"Training time: {(end-start)/60:.3f} minutes")
-
-print('Saving loss and accuracy plots...')
-# accuracy plots
-plt.figure(figsize=(10, 7))
-plt.plot(train_accuracy, color='green', label='train accuracy')
-plt.plot(val_accuracy, color='blue', label='validataion accuracy')
-plt.xlabel('Epochs')
-plt.ylabel('Accuracy')
-plt.legend()
-plt.savefig(f"outputs/{acc_plot_name}.png")
-plt.show()
-# loss plots
-plt.figure(figsize=(10, 7))
-plt.plot(train_loss, color='orange', label='train loss')
-plt.plot(val_loss, color='red', label='validataion loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
-plt.savefig(f"outputs/{loss_plot_name}.png")
-plt.show()
-
-# serialize the model to disk
-print('Saving model...')
-torch.save(model.state_dict(), f"outputs/{model_name}.pth")
 
 print('TRAINING COMPLETE')
