@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 import sys
+import os
 import time
 import argparse
 import torch
@@ -10,6 +11,7 @@ from torch.cuda.amp import autocast, GradScaler
 import torchvision
 import torchvision.transforms as transforms
 import torch.autograd.profiler as profiler
+import torchvision.models as models
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +19,7 @@ from tqdm import tqdm
 from torchsummary import summary
 from MedT_C import MedT_C
 from utils import EarlyStopping, LRScheduler
+from performer_pytorch import Performer
 
 print(f"PyTorch Version: {torch.__version__}")
 print()
@@ -35,6 +38,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--lr-schedular', dest='lr_scheduler', action='store_true')
 parser.add_argument('--early-stopping',
                     dest='early_stopping', action='store_true')
+parser.add_argument('--resnet', dest='resnet', action='store_true')
+parser.add_argument('--performer', dest='performer', action='store_true')
 args = vars(parser.parse_args())
 
 
@@ -78,6 +83,17 @@ model = MedT_C(
     num_classes=10,
     feature_dim=256
 ).cuda()
+
+if args['resnet']:
+    model = models.resnet50().cuda()
+
+if args['performer']:
+    model = Performer(
+        dim=256,
+        depth=1,
+        heads=8,
+        causal=True
+    )
 
 device = torch.device("cuda:0" if next(
     model.parameters()).is_cuda else "cpu")
@@ -194,6 +210,7 @@ def validate(model, test_dataloader, val_dataset, criterion):
 
 
 def save(
+        directory,
         train_accuracy,
         val_accuracy,
         acc_plot_name,
@@ -203,6 +220,11 @@ def save(
         model_name,
         show_plots=False
 ):
+    try:
+        os.mkdir(directory)
+    except FileExistsError as FEE:
+        print("Directory already exists")
+
     print('Saving loss and accuracy plots...')
     # accuracy plots
     plt.figure(figsize=(10, 7))
@@ -211,8 +233,9 @@ def save(
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.legend()
-    plt.savefig(f"outputs/{acc_plot_name}.png")
-    if show_plots: plt.show()
+    plt.savefig(f"{directory}/{acc_plot_name}.png")
+    if show_plots:
+        plt.show()
     # loss plots
     plt.figure(figsize=(10, 7))
     plt.plot(train_loss, color='orange', label='train loss')
@@ -220,12 +243,13 @@ def save(
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(f"outputs/{loss_plot_name}.png")
-    if show_plots: plt.show()
+    plt.savefig(f"{directory}/{loss_plot_name}.png")
+    if show_plots:
+        plt.show()
 
     # serialize the model to disk
     print('Saving model...')
-    torch.save(model.state_dict(), f"outputs/{model_name}.pth")
+    torch.save(model.state_dict(), f"{directory}/{model_name}.pth")
 
 
 train_loss, train_accuracy = [], []
@@ -258,8 +282,9 @@ for epoch in range(epochs):
         f"Train Loss: {train_epoch_loss:.4f}, Train Acc: {train_epoch_accuracy:.2f}")
     print(
         f'Val Loss: {val_epoch_loss:.4f}, Val Acc: {val_epoch_accuracy:.2f}')
-    save(train_accuracy, val_accuracy, acc_plot_name, train_loss,
-        val_loss, loss_plot_name, model_name, show_plots=False)
+    save(f"outputs/{time.strftime('%d-%m-%Y_%H:%M', time.gmtime(start))}",
+         train_accuracy, val_accuracy, acc_plot_name, train_loss,
+         val_loss, loss_plot_name, model_name, show_plots=False)
 
 end = time.time()
 print(f"Training time: {(end-start)/60:.3f} minutes")
