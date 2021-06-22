@@ -157,7 +157,7 @@ class GatedAxialTransformerLayer(nn.Module):
         return y
 
 
-class Encoder(nn.Module):
+class Branch(nn.Module):
     def __init__(
         self,
         img_dim,
@@ -167,7 +167,7 @@ class Encoder(nn.Module):
         conv_kernel_size=7,
         heads=8,
     ):
-        super(Encoder, self).__init__()
+        super(Branch, self).__init__()
 
         self.cnn = nn.Sequential(
             nn.Conv2d(
@@ -221,6 +221,38 @@ class Encoder(nn.Module):
         return y
 
 
+class Encoder(nn.Module):
+    def __init__(
+        self,
+        img_dim,
+        patch_dim,
+        feature_dim,
+    ):
+        super(Encoder, self).__init__()
+
+        assert img_dim % patch_dim == 0, f"Image dimension {img_dim} is not divisible by patch dimension {patch_dim}."
+        self.img_dim = img_dim
+        self.patch_dim = patch_dim
+
+        self.global_branch = Branch(img_dim, feature_dim, 2)
+        self.local_branch = Branch(patch_dim, feature_dim, 5)
+
+    def forward(self, x):
+        yg = self.global_branch(x)
+        # could probably do this with convolution and then reshape, would likely be faster...
+        yl = yg.clone()
+        for i in range(0, self.img_dim // self.patch_dim):
+            for j in range(0, self.img_dim // self.patch_dim):
+                patch = x[:, :, self.patch_dim*i:self.patch_dim *
+                          (i+1), self.patch_dim*j:self.patch_dim*(j+1)]
+                y_patch = self.local_branch(patch)
+                yl[:, :, self.patch_dim*i:self.patch_dim *
+                    (i+1), self.patch_dim*j:self.patch_dim*(j+1)] = y_patch
+
+        y = yg + yl  # not sure if this is the right way to do a summation?
+        return y
+
+
 class Decoder(nn.Module):
     def __init__(self, in_channels, num_classes):
         super(Decoder, self).__init__()
@@ -245,27 +277,11 @@ class MedT_C(nn.Module):
         feature_dim=256,
     ):
         super(MedT_C, self).__init__()
-        assert img_dim % patch_dim == 0, f"Image dimension {img_dim} is not divisible by patch dimension {patch_dim}."
-        self.img_dim = img_dim
-        self.patch_dim = patch_dim
 
-        self.global_branch = Encoder(img_dim, feature_dim, 2)
-        self.local_branch = Encoder(patch_dim, feature_dim, 5)
-
+        self.encoder = Encoder(img_dim, patch_dim, feature_dim)
         self.decoder = Decoder(feature_dim, num_classes)
 
     def forward(self, x):
-        yg = self.global_branch(x)
-        # could probably do this with convolution and then reshape, would likely be faster...
-        yl = yg.clone()
-        for i in range(0, self.img_dim // self.patch_dim):
-            for j in range(0, self.img_dim // self.patch_dim):
-                patch = x[:, :, self.patch_dim*i:self.patch_dim *
-                          (i+1), self.patch_dim*j:self.patch_dim*(j+1)]
-                y_patch = self.local_branch(patch)
-                yl[:, :, self.patch_dim*i:self.patch_dim *
-                    (i+1), self.patch_dim*j:self.patch_dim*(j+1)] = y_patch
-
-        y = yg + yl  # not sure if this is the right way to do a summation?
+        y = self.encoder(x)
         y = self.decoder(y)
         return y
