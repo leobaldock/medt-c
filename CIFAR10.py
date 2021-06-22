@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 import torchvision
+from torchvision.models.resnet import resnet50
 import torchvision.transforms as transforms
 import torch.autograd.profiler as profiler
 import torchvision.models as models
@@ -28,13 +29,9 @@ print("GPU is", "available" if torch.cuda.is_available() else "NOT AVAILABLE")
 print(
     f"Using device {torch.cuda.get_device_name(torch.cuda.current_device())}")
 
-### CONSTANTS ###
-DATA_PATH = './data'
-BATCH_SIZE = 64
-LOADER_WORKERS = 8
-### END CONSTANTS ###
-
 parser = argparse.ArgumentParser()
+parser.add_argument('--batch-size', type=int, dest='batch_size',
+                    action='store', help='the batch size', required=True)
 parser.add_argument('--lr-schedular', dest='lr_scheduler', action='store_true')
 parser.add_argument('--early-stopping',
                     dest='early_stopping', action='store_true')
@@ -42,6 +39,11 @@ parser.add_argument('--resnet', dest='resnet', action='store_true')
 parser.add_argument('--performer', dest='performer', action='store_true')
 args = vars(parser.parse_args())
 
+### CONSTANTS ###
+DATA_PATH = './data'
+BATCH_SIZE = args['batch_size']
+LOADER_WORKERS = 8
+### END CONSTANTS ###
 
 train_transform = transforms.Compose(
     [
@@ -251,6 +253,8 @@ def save(
     print('Saving model...')
     torch.save(model.state_dict(), f"{directory}/{model_name}.pth")
 
+
+print(f"Using batch size {BATCH_SIZE}.")
 
 train_loss, train_accuracy = [], []
 val_loss, val_accuracy = [], []
