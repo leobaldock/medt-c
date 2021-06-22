@@ -32,7 +32,7 @@ dependencies:
   - cloudpickle=1.6.0=py_0
   - coverage=5.5=py38h27cfd23_2
   - cryptography=3.4.7=py38hd23ed53_0
-  - cudatoolkit=10.2.89=hfd86e86_1
+  - cudatoolkit=10.1.243=h6bb024c_0
   - cycler=0.10.0=py38_0
   - cython=0.29.23=py38h2531618_0
   - cytoolz=0.11.0=py38h7b6447c_0
@@ -164,7 +164,7 @@ dependencies:
   - python=3.8.8=hdb3f193_4
   - python-dateutil=2.8.1=pyhd3eb1b0_0
   - python_abi=3.8=1_cp38
-  - pytorch=1.8.1=py3.8_cuda10.2_cudnn7.6.5_0
+  - pytorch=1.8.1=py3.8_cuda10.1_cudnn7.6.3_0
   - pywavelets=1.1.1=py38h7b6447c_2
   - pyyaml=5.4.1=py38h27cfd23_1
   - pyzmq=20.0.0=py38h2531618_1
@@ -190,7 +190,7 @@ dependencies:
   - tifffile=2021.4.8=pyhd3eb1b0_2
   - tk=8.6.10=hbc83047_0
   - toolz=0.11.1=pyhd3eb1b0_0
-  - torchvision=0.9.1=py38_cu102
+  - torchvision=0.9.1=py38_cu101
   - tornado=6.1=py38h27cfd23_0
   - tqdm=4.59.0=pyhd3eb1b0_1
   - traitlets=5.0.5=pyhd3eb1b0_0
