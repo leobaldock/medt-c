@@ -30,13 +30,14 @@ print(
     f"Using device {torch.cuda.get_device_name(torch.cuda.current_device())}")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch-size', type=int, dest='batch_size',
+parser.add_argument('--batchsize', type=int, dest='batch_size',
                     action='store', help='the batch size', required=True)
 parser.add_argument('--lr-schedular', dest='lr_scheduler', action='store_true')
 parser.add_argument('--early-stopping',
                     dest='early_stopping', action='store_true')
 parser.add_argument('--resnet', dest='resnet', action='store_true')
 parser.add_argument('--performer', dest='performer', action='store_true')
+parser.add_argument('--notrain', dest='no_train', action='store_true')
 args = vars(parser.parse_args())
 
 ### CONSTANTS ###
@@ -255,6 +256,15 @@ def save(
 
 
 print(f"Using batch size {BATCH_SIZE}.")
+
+if args['no_train']:
+    model.load_state_dict(torch.load("./outputs/model_latest.pth"))
+    val_epoch_loss, val_epoch_accuracy = validate(
+        model, val_loader, val_set, criterion)
+    print(
+        f'Val Loss: {val_epoch_loss:.4f}, Val Acc: {val_epoch_accuracy:.2f}')
+    sys.exit()
+
 
 train_loss, train_accuracy = [], []
 val_loss, val_accuracy = [], []
